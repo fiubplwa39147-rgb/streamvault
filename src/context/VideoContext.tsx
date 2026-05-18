@@ -12,7 +12,6 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { Video } from "../types";
-import { DEMO_VIDEOS } from "../data/demoData";
 
 interface VideoContextType {
   videos: Video[];
@@ -44,17 +43,13 @@ export function VideoProvider({ children }: { children: ReactNode }) {
         ...doc.data()
       })) as Video[];
       
-      // If database is empty, load demo data
-      if (videoData.length === 0) {
-        setVideos(DEMO_VIDEOS);
-      } else {
-        setVideos(videoData);
-      }
+      // Load videos from Firestore - no demo data fallback
+      setVideos(videoData);
       setIsLoading(false);
     }, (error) => {
-      console.error("Firestore error, falling back to demo data:", error);
-      // Fallback to demo data on error (e.g., permission denied or missing index)
-      setVideos(DEMO_VIDEOS);
+      console.error("Firestore error:", error);
+      // On error, set empty array - forces admin to add videos
+      setVideos([]);
       setIsLoading(false);
     });
 
