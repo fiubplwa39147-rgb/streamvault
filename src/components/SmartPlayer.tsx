@@ -26,11 +26,14 @@ interface SmartPlayerProps {
  * Normalise any video URL into a proper embed URL.
  *
  * Supported patterns
- *  • youtube.com/watch?v=ID   → youtube.com/embed/ID?autoplay=1&rel=0
- *  • youtu.be/ID              → youtube.com/embed/ID?autoplay=1&rel=0
- *  • youtube.com/embed/ID     → kept, autoplay injected
- *  • filemoon.sx/ID/… or /e/ID → filemoon.sx/e/ID?autoplay=1
- *  • streamtape / doodstream / mixdrop etc. → URL kept, autoplay attempted
+ *  • youtube.com/watch?v=ID      → youtube.com/embed/ID?autoplay=1&rel=0
+ *  • youtu.be/ID                 → youtube.com/embed/ID?autoplay=1&rel=0
+ *  • youtube.com/embed/ID        → kept, autoplay injected
+ *  • filemoon.sx/ID/… or /e/ID  → filemoon.sx/e/ID?autoplay=1
+ *  • koro.to/v/ID                → koro.to/embed/ID?autoplay=1
+ *  • dood.watch/d/ID             → dood.watch/e/ID?autoplay=1
+ *  • doodstream.com/d/ID         → doodstream.com/e/ID?autoplay=1
+ *  • streamtape / mixdrop etc.   → URL kept, autoplay attempted
  *  • full <iframe …> HTML string → returned as-is (rendered via innerHTML)
  */
 function buildEmbedUrl(raw: string): string {
@@ -61,6 +64,44 @@ function buildEmbedUrl(raw: string): string {
       if (idMatch?.[1]) {
         const u = new URL(raw);
         return `${u.protocol}//${u.host}/e/${idMatch[1]}?autoplay=1`;
+      }
+    }
+
+    // ── Koro ──
+    // Supports:  koro.to/v/ID  |  koro.to/embed/ID  |  korostream.xyz/v/ID  etc.
+    if (raw.includes("koro")) {
+      // Already an embed URL → just inject autoplay
+      const koroEmbed = raw.match(/koro[^/]*\/embed\/([a-zA-Z0-9_-]+)/);
+      if (koroEmbed) {
+        const u = new URL(raw);
+        u.searchParams.set("autoplay", "1");
+        return u.toString();
+      }
+      // Watch / share URL (v, watch, e) → convert to /embed/ID
+      const koroWatch = raw.match(/koro[^/]*\/(?:v|watch|e)\/([a-zA-Z0-9_-]+)/);
+      if (koroWatch) {
+        const u = new URL(raw);
+        return `${u.protocol}//${u.host}/embed/${koroWatch[1]}?autoplay=1`;
+      }
+    }
+
+    // ── Doodstream ──
+    // Domains:   doodstream.com  |  dood.watch  |  dood.to  |  dood.so  etc.
+    // Patterns:
+    //   /d/ID   (download/share) → /e/ID?autoplay=1
+    //   /f/ID   (file page)      → /e/ID?autoplay=1
+    //   /e/ID   (already embed)  → kept, autoplay injected
+    if (raw.includes("dood")) {
+      const doodEmbed = raw.match(/\/e\/([a-zA-Z0-9]+)/);
+      if (doodEmbed) {
+        const u = new URL(raw);
+        u.searchParams.set("autoplay", "1");
+        return u.toString();
+      }
+      const doodOther = raw.match(/\/(?:d|f|v)\/([a-zA-Z0-9]+)/);
+      if (doodOther) {
+        const u = new URL(raw);
+        return `${u.protocol}//${u.host}/e/${doodOther[1]}?autoplay=1`;
       }
     }
 
