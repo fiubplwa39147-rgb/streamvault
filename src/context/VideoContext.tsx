@@ -34,50 +34,98 @@ export const useVideos = () => useContext(VideoContext);
 export function VideoProvider({ children }: { children: ReactNode }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, "videos"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const videoData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Video[];
-      
-      // Load videos from Firestore - no demo data fallback
-      setVideos(videoData);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Firestore error:", error);
-      // On error, set empty array - forces admin to add videos
-      setVideos([]);
-      setIsLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        try {
+          const videoData = snapshot.docs.map(doc => {
+            const data = doc.data();
+            // Validate video has required fields
+            if (!data.title || !data.sources?.primary) {
+              console.warn(`Invalid video document ${doc.id}: missing title or primary source`);
+              return null;
+            }
+            return {
+              id: doc.id,
+              ...data
+            };
+          }).filter((v): v is Video => v !== null);
+          
+          console.log(`✅ Loaded ${videoData.length} videos from Firestore`);
+          setVideos(videoData);
+          setError(null);
+          setIsLoading(false);
+        } catch (err) {
+          console.error("Error processing Firestore data:", err);
+          setError("Error loading videos");
+          setVideos([]);
+          setIsLoading(false);
+        }
+      },
+      (error) => {
+        console.error("❌ Firestore connection error:", error);
+        setError(error.message);
+        setVideos([]);
+        setIsLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, []);
 
   const addVideo = async (video: Omit<Video, "id" | "views" | "createdAt">) => {
-    await addDoc(collection(db, "videos"), {
-      ...video,
-      views: 0,
-      createdAt: Date.now(),
-    });
+    try {
+      // Validate video data
+      if (!video.title || !video.sources.primary) {
+        throw new Error("Title and primary source are required");
+      }
+
+      const docRef = await addDoc(collection(db, "videos"), {
+        ...video,
+        views: 0,
+        createdAt: Date.now(),
+      });
+      console.log("✅ Video added with ID:", docRef.id);
+    } catch (err) {
+      console.error("Error adding video:", err);
+      throw err;
+    }
   };
 
   const updateVideo = async (id: string, updates: Partial<Video>) => {
-    const videoRef = doc(db, "videos", id);
-    await updateDoc(videoRef, updates);
+    try {
+      const videoRef = doc(db, "videos", id);
+      await updateDoc(videoRef, updates);
+      console.log("✅ Video updated:", id);
+    } catch (err) {
+      console.error("Error updating video:", err);
+      throw err;
+    }
   };
 
   const deleteVideo = async (id: string) => {
-    await deleteDoc(doc(db, "videos", id));
+    try {
+      await deleteDoc(doc(db, "videos", id));
+      console.log("✅ Video deleted:", id);
+    } catch (err) {
+      console.error("Error deleting video:", err);
+      throw err;
+    }
   };
 
   const incrementViews = async (id: string) => {
-    const videoRef = doc(db, "videos", id);
-    await updateDoc(videoRef, {
-      views: increment(1)
-    });
+    try {
+      const videoRef = doc(db, "videos", id);
+      await updateDoc(videoRef, {
+        views: increment(1)
+      });
+    } catch (err) {
+      console.error("Error incrementing views:", err);
+    }
   };
 
   const getVideoById = (id: string) => videos.find((v) => v.id === id);
